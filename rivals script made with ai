@@ -1,0 +1,236 @@
+--[[
+    ROSCRIPTZZ DEV HUB V5 (DEV SAFE)
+    - Aim Assist (Smooth Legit Lock)
+    - Player Tracker (Tracers + Distance)
+    - Real Sliders (Drag)
+    - Red Flashy UI + Tabs
+    - Keybinds (Q / Z)
+]]
+
+--// SERVICES
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UIS = game:GetService("UserInputService")
+local Camera = workspace.CurrentCamera
+
+local LP = Players.LocalPlayer
+
+--// STATE
+local State = {
+    AimAssist = false,
+    Tracker = false
+}
+
+local Config = {
+    FOV = 150,
+    Smoothness = 0.2
+}
+
+--// TARGET SYSTEM
+local function GetClosest()
+    local closest, dist = nil, math.huge
+    local center = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+
+    for _,plr in pairs(Players:GetPlayers()) do
+        if plr ~= LP and plr.Character then
+            local root = plr.Character:FindFirstChild("HumanoidRootPart")
+            if root then
+                local pos, vis = Camera:WorldToViewportPoint(root.Position)
+                if vis then
+                    local mag = (Vector2.new(pos.X,pos.Y)-center).Magnitude
+                    if mag < Config.FOV and mag < dist then
+                        dist = mag
+                        closest = root
+                    end
+                end
+            end
+        end
+    end
+
+    return closest
+end
+
+--// AIM ASSIST
+RunService.RenderStepped:Connect(function()
+    if not State.AimAssist then return end
+
+    local target = GetClosest()
+    if not target then return end
+
+    local newCF = CFrame.new(Camera.CFrame.Position, target.Position)
+    Camera.CFrame = Camera.CFrame:Lerp(newCF, Config.Smoothness)
+end)
+
+--// TRACKER (TRACERS + DISTANCE)
+local drawings = {}
+
+local function AddTracker(plr)
+    if plr == LP then return end
+
+    local line = Drawing.new("Line")
+    line.Thickness = 2
+    line.Color = Color3.fromRGB(255,0,0)
+
+    local text = Drawing.new("Text")
+    text.Size = 14
+    text.Center = true
+    text.Outline = true
+    text.Color = Color3.new(1,1,1)
+
+    drawings[plr] = {line, text}
+end
+
+for _,p in pairs(Players:GetPlayers()) do AddTracker(p) end
+Players.PlayerAdded:Connect(AddTracker)
+
+RunService.RenderStepped:Connect(function()
+    for plr,objs in pairs(drawings) do
+        local char = plr.Character
+        local root = char and char:FindFirstChild("HumanoidRootPart")
+
+        if root and State.Tracker then
+            local pos, vis = Camera:WorldToViewportPoint(root.Position)
+            if vis then
+                local viewport = Camera.ViewportSize
+                local dist = (root.Position - Camera.CFrame.Position).Magnitude
+
+                objs[1].From = Vector2.new(viewport.X/2, viewport.Y)
+                objs[1].To = Vector2.new(pos.X,pos.Y)
+                objs[1].Visible = true
+
+                objs[2].Text = plr.Name.." ["..math.floor(dist).."]"
+                objs[2].Position = Vector2.new(pos.X,pos.Y-15)
+                objs[2].Visible = true
+            else
+                objs[1].Visible = false
+                objs[2].Visible = false
+            end
+        else
+            objs[1].Visible = false
+            objs[2].Visible = false
+        end
+    end
+end)
+
+--// KEYBINDS
+UIS.InputBegan:Connect(function(input,gp)
+    if gp then return end
+
+    if input.KeyCode == Enum.KeyCode.Q then
+        State.AimAssist = not State.AimAssist
+        print("Aim Assist:", State.AimAssist)
+    end
+
+    if input.KeyCode == Enum.KeyCode.Z then
+        State.Tracker = not State.Tracker
+        print("Tracker:", State.Tracker)
+    end
+end)
+
+--// UI
+local gui = Instance.new("ScreenGui", LP:WaitForChild("PlayerGui"))
+gui.ResetOnSpawn = false
+
+local main = Instance.new("Frame", gui)
+main.Size = UDim2.new(0,400,0,250)
+main.Position = UDim2.new(0.5,-200,0.5,-125)
+main.BackgroundColor3 = Color3.fromRGB(20,0,0)
+
+local corner = Instance.new("UICorner", main)
+
+-- DRAG
+local dragging,dragStart,startPos
+main.InputBegan:Connect(function(i)
+    if i.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true
+        dragStart = i.Position
+        startPos = main.Position
+    end
+end)
+
+UIS.InputChanged:Connect(function(i)
+    if dragging and i.UserInputType == Enum.UserInputType.MouseMovement then
+        local delta = i.Position - dragStart
+        main.Position = startPos + UDim2.new(0,delta.X,0,delta.Y)
+    end
+end)
+
+UIS.InputEnded:Connect(function(i)
+    if i.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = false
+    end
+end)
+
+-- BUTTONS
+local function MakeButton(text,y,callback)
+    local b = Instance.new("TextButton", main)
+    b.Size = UDim2.new(0,180,0,40)
+    b.Position = UDim2.new(0,20,0,y)
+    b.Text = text
+    b.BackgroundColor3 = Color3.fromRGB(120,0,0)
+    b.TextColor3 = Color3.new(1,1,1)
+    b.MouseButton1Click:Connect(callback)
+end
+
+MakeButton("Toggle Aim Assist (Q)",20,function()
+    State.AimAssist = not State.AimAssist
+end)
+
+MakeButton("Toggle Tracker (Z)",70,function()
+    State.Tracker = not State.Tracker
+end)
+
+-- SLIDER FUNCTION
+local function CreateSlider(name, y, min, max, default, callback)
+    local frame = Instance.new("Frame", main)
+    frame.Position = UDim2.new(0,20,0,y)
+    frame.Size = UDim2.new(0,300,0,40)
+    frame.BackgroundColor3 = Color3.fromRGB(40,0,0)
+
+    local label = Instance.new("TextLabel", frame)
+    label.Size = UDim2.new(1,0,0,20)
+    label.Text = name..": "..default
+    label.BackgroundTransparency = 1
+    label.TextColor3 = Color3.new(1,1,1)
+
+    local bar = Instance.new("Frame", frame)
+    bar.Size = UDim2.new(1,0,0,10)
+    bar.Position = UDim2.new(0,0,0,25)
+    bar.BackgroundColor3 = Color3.fromRGB(80,0,0)
+
+    local fill = Instance.new("Frame", bar)
+    fill.Size = UDim2.new((default-min)/(max-min),0,1,0)
+    fill.BackgroundColor3 = Color3.fromRGB(255,0,0)
+
+    local dragging = false
+
+    bar.InputBegan:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1 then dragging = true end
+    end)
+
+    UIS.InputEnded:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
+    end)
+
+    UIS.InputChanged:Connect(function(i)
+        if dragging and i.UserInputType == Enum.UserInputType.MouseMovement then
+            local percent = math.clamp((i.Position.X - bar.AbsolutePosition.X)/bar.AbsoluteSize.X,0,1)
+            fill.Size = UDim2.new(percent,0,1,0)
+            local val = min + (max-min)*percent
+            val = math.floor(val*100)/100
+            label.Text = name..": "..val
+            callback(val)
+        end
+    end)
+end
+
+-- SLIDERS
+CreateSlider("FOV",130,50,300,150,function(v)
+    Config.FOV = v
+end)
+
+CreateSlider("Smoothness",180,0.05,1,0.2,function(v)
+    Config.Smoothness = v
+end)
+
+print("🔥 ROSCRIPTZZ DEV HUB LOADED")
